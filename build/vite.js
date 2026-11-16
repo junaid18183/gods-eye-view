@@ -201,6 +201,43 @@ export function hashedAssetCachePlugin() {
   };
 }
 
+/**
+ * Serves the Cesium ion token at runtime, from the server's environment when
+ * the process starts. The browser bundle otherwise has the token from build
+ * time, so a token set only on a running server (for example a Kubernetes
+ * Secret) would never reach the page. The page falls back to the build-time
+ * value when this answers empty.
+ */
+export function clientConfigPlugin({ cesiumToken = '' } = {}) {
+  const body = JSON.stringify({
+    cesiumToken: String(cesiumToken || '').trim(),
+  });
+  const handle = (req, res, next) => {
+    const path = String(req.url || '').split(/[?#]/, 1)[0];
+    if (path !== '/api/client-config') return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.statusCode = 405;
+      res.setHeader('Allow', 'GET, HEAD');
+      res.end();
+      return undefined;
+    }
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(req.method === 'HEAD' ? undefined : body);
+    return undefined;
+  };
+  return {
+    name: 'client-config',
+    configureServer(server) {
+      server.middlewares.use(handle);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handle);
+    },
+  };
+}
+
 /** Build browser assets with explicit inputs; never load environment or providers. */
 export function createBrowserViteConfig({
   plugins = [],
@@ -221,6 +258,8 @@ export function createBrowserViteConfig({
       apiResponseHeadersPlugin(),
       // Next, so no provider route answers a Host the server does not allow.
       hostCheckPlugin(),
+      // Before the caller's plugins, so no 404 catch-all answers this route.
+      clientConfigPlugin({ cesiumToken }),
       cesium(),
       // Application views are Vue single-file components.
       vue(VUE_PLUGIN_OPTIONS),

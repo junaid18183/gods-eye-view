@@ -25,6 +25,7 @@ export function createStandaloneApplication({
   renderer,
   googleApiKey,
   cesiumToken,
+  mapillaryToken,
   geospatial = {},
   voice = {},
   sources = {},
@@ -77,6 +78,7 @@ export function createStandaloneApplication({
       });
       catalog = createStandaloneCatalog({
         sources,
+        mapillaryToken,
         streetLevelProviders,
         nepalBoundaryResolver: (signal) =>
           scene.operations.annotationResolver.resolveRegionRingForQuery(

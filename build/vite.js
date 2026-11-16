@@ -206,11 +206,22 @@ export function hashedAssetCachePlugin() {
  * the process starts. The browser bundle otherwise has the token from build
  * time, so a token set only on a running server (for example a Kubernetes
  * Secret) would never reach the page. The page falls back to the build-time
- * value when this answers empty.
+ * value when an entry is empty or absent. The same applies to the Google and
+ * Mapillary browser keys and the Photon endpoint, which the browser also reads.
  */
-export function clientConfigPlugin({ cesiumToken = '' } = {}) {
+export function clientConfigPlugin({
+  cesiumToken = '',
+  googleApiKey = '',
+  mapillaryToken = '',
+  photonUrl,
+} = {}) {
+  const clean = (value) => String(value ?? '').trim();
   const body = JSON.stringify({
-    cesiumToken: String(cesiumToken || '').trim(),
+    cesiumToken: clean(cesiumToken),
+    googleApiKey: clean(googleApiKey),
+    mapillaryToken: clean(mapillaryToken),
+    // undefined (not set), null (disabled) or a validated https URL.
+    photonUrl: photonEndpointSetting(photonUrl),
   });
   const handle = (req, res, next) => {
     const path = String(req.url || '').split(/[?#]/, 1)[0];
@@ -259,7 +270,12 @@ export function createBrowserViteConfig({
       // Next, so no provider route answers a Host the server does not allow.
       hostCheckPlugin(),
       // Before the caller's plugins, so no 404 catch-all answers this route.
-      clientConfigPlugin({ cesiumToken }),
+      clientConfigPlugin({
+        cesiumToken,
+        googleApiKey,
+        mapillaryToken,
+        photonUrl,
+      }),
       cesium(),
       // Application views are Vue single-file components.
       vue(VUE_PLUGIN_OPTIONS),

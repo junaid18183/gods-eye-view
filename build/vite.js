@@ -163,6 +163,44 @@ export function apiResponseHeadersPlugin() {
   };
 }
 
+/**
+ * Rollup names build output `<name>-<8 char hash>.<ext>` under `assets/`. The
+ * hash changes whenever the content does, so those files can be cached for a
+ * year and marked immutable. The HTML document is not hashed and stays
+ * revalidated, so a new deploy takes effect on the next load.
+ */
+const HASHED_ASSET_PATH = /^\/assets\/.+-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
+const HASHED_ASSET_CACHE = 'public, max-age=31536000, immutable';
+
+/**
+ * Preview-only (the production image serves with `vite preview`): let browsers
+ * keep hashed build assets instead of revalidating the multi-megabyte bundle
+ * on every visit. The dev server is untouched.
+ */
+export function hashedAssetCachePlugin() {
+  return {
+    name: 'hashed-asset-cache',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = String(req.url || '').split(/[?#]/, 1)[0];
+        if (
+          (req.method === 'GET' || req.method === 'HEAD') &&
+          HASHED_ASSET_PATH.test(path)
+        ) {
+          // Vite's static handler sets `no-cache` after this middleware runs,
+          // so the value is pinned here rather than set once.
+          const setHeader = res.setHeader.bind(res);
+          res.setHeader = (name, value) =>
+            String(name).toLowerCase() === 'cache-control'
+              ? setHeader(name, HASHED_ASSET_CACHE)
+              : setHeader(name, value);
+        }
+        next();
+      });
+    },
+  };
+}
+
 /** Build browser assets with explicit inputs; never load environment or providers. */
 export function createBrowserViteConfig({
   plugins = [],
@@ -189,6 +227,7 @@ export function createBrowserViteConfig({
       ...plugins,
       embedFramingPlugin(),
       panelBuildPlugin(),
+      hashedAssetCachePlugin(),
     ],
     ...(publicDir === undefined ? {} : { publicDir }),
     // A production build must not clean the dependency cache a running dev
